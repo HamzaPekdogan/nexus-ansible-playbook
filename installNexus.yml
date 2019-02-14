@@ -1,0 +1,85 @@
+---
+- name: Install Nexus
+  hosts: nexusList
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Install yum
+      yum:
+        name:
+          - wget
+          - java-1.8.0-openjdk
+
+          
+    - name: Creates directory
+      file:
+        path: /app
+        state: directory  
+
+    - name: Download Nexus
+      get_url:
+        url: https://sonatype-download.global.ssl.fastly.net/nexus/3/nexus-3.0.2-02-unix.tar.gz
+        dest: /app/nexus-3.0.2-02-unix.tar.gz 
+        
+    - name: Extract /app/nexus-3.0.2-02-unix.tar.gz into /app
+      unarchive:
+        src: /app/nexus-3.0.2-02-unix.tar.gz
+        dest: /app
+    
+    - name: mv
+      command: mv /app/nexus-3.0.2-02 /app/nexus
+      register: root
+        
+    - name: Add the user 'nexus' with a specific uid
+      user:
+        name: nexus
+        comment: Hamza Pekdogan
+        uid: 1040
+        
+    - file:
+        path: /app/nexus
+        owner: nexus
+        group: nexus
+        mode: 0777
+
+    - replace:
+        path: /app/nexus/bin/nexus.rc
+        regexp: 'run_as_user=""'
+        replace: 'run_as_user="nexus"'
+        backup: yes
+        
+    - name: run command
+      command: ln -s /app/nexus/bin/nexus /etc/init.d/nexus
+      register: root
+    
+    - name: add user
+      command: chkconfig --add nexus
+      register: root
+    
+    - name: nexus on
+      command: chkconfig --levels 345 nexus on
+      register: root
+       
+    - name: Start & Enable Nexus
+      systemd:
+        name: nexus
+        state: started
+        enabled: true
+
+    - name: allow iri tcp port in firewall
+      firewalld:
+        port: "8081/tcp"
+        permanent: true
+        state: enabled
+        immediate: yes
+
+    - name: ensure firewalld started and enabled
+      systemd:
+        name: firewalld
+        state: restarted
+        enabled: yes
+        
+    - name: Start service nexus
+      service:
+        name: nexus
+        state: started
